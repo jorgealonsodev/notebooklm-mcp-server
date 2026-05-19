@@ -1,0 +1,11 @@
+# Binary
+notebooklm-mcp-server
+
+# SDD artifacts
+.atl/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
