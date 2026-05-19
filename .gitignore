@@ -4,8 +4,9 @@ notebooklm-mcp-server
 # SDD artifacts
 .atl/
 
-# IDE
-.idea/
-.vscode/
+# IDE (keep MCP configs, ignore IDE-specific clutter)
+.idea/*
+.vscode/*
+!.vscode/mcp.json
 *.swp
 *.swo

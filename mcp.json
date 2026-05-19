@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "./notebooklm-mcp-server",
+      "args": ["--transport=stdio"],
+      "env": {
+        "HEADLESS": "false",
+        "STEALTH_ENABLED": "true",
+        "ANSWER_TIMEOUT_MS": "300000"
+      }
+    }
+  }
+}
