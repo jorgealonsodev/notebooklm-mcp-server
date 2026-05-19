@@ -1,13 +1,17 @@
 package auth
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jorge/notebooklm-mcp-server/internal/apperrors"
 	"github.com/jorge/notebooklm-mcp-server/internal/config"
+	"github.com/playwright-community/playwright-go"
 )
 
 // Manager handles Google authentication via cookie persistence.
@@ -31,33 +35,143 @@ func (m *Manager) Validate(now time.Time) error {
 // browser context that is only available in integration / headful mode.
 var ErrInteractiveRequired = fmt.Errorf("interactive setup requires a real browser (run without -short flag for integration tests)")
 
+// pageLike is the minimal interface needed for URL polling during setup.
+type pageLike interface {
+	URL() string
+}
+
 // PerformSetup performs interactive browser login by navigating to Google
-// and waiting for the user to complete authentication. The caller is
-// responsible for providing a page from a headful browser context.
+// and waiting for the user to complete authentication.
 //
-// This method saves the browser state after successful login.
+// If pw is nil, a standalone Playwright instance is launched and stopped
+// when setup completes. The browser is always launched headful (headless=false)
+// so the user can see and interact with the Google login page.
 //
-// The interactive flow when running with a real browser:
-//  1. Navigate to https://notebooklm.google.com
-//  2. Wait for Google login redirect (up to 10 minutes)
-//  3. User completes login manually
-//  4. Wait for redirect back to NotebookLM
-//  5. Save browser state (cookies + localStorage)
+// The interactive flow:
+//  1. Launch a headful browser (headless=false)
+//  2. Navigate to https://notebooklm.google.com
+//  3. Print to stderr: user-facing message to complete login
+//  4. Poll page.URL() every 2 seconds checking if URL contains
+//     "notebooklm.google" (not "accounts.google")
+//  5. Once on NotebookLM, save browser state via context.StorageState(path)
+//  6. Close the browser
+//  7. Return nil on success
 //
-// In unit test mode (testing.Short()), this returns ErrInteractiveRequired.
-func (m *Manager) PerformSetup(page interface{}) error {
-	if page == nil {
-		return fmt.Errorf("cannot perform setup: %w", ErrInteractiveRequired)
+// Timeout is controlled by cfg.SetupTimeoutMs (default 10 minutes).
+func (m *Manager) PerformSetup(ctx context.Context, pw *playwright.Playwright, cfg config.Config) error {
+	ownPW := pw == nil
+	if ownPW {
+		var err error
+		pw, err = playwright.Run()
+		if err != nil {
+			return fmt.Errorf("playwright.Run: %w", err)
+		}
+		defer func() { _ = pw.Stop() }()
 	}
-	// Full implementation requires playwright.Page and is tested via
-	// integration tests (skipped with -short).
-	type pageNavigator interface {
-		Goto(url string, opts ...interface{}) (interface{}, error)
+
+	// Launch a headful browser with a temporary profile for setup
+	userDataDir, err := os.MkdirTemp("", "notebooklm-setup-*")
+	if err != nil {
+		return fmt.Errorf("create temp profile dir: %w", err)
 	}
-	if _, ok := page.(pageNavigator); ok {
-		return ErrInteractiveRequired
+	defer func() { _ = os.RemoveAll(userDataDir) }()
+
+	args := []string{
+		"--disable-blink-features=AutomationControlled",
+		"--disable-dev-shm-usage",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--disable-extensions",
+		"--disable-gpu",
 	}
-	return fmt.Errorf("cannot perform setup: %w", ErrInteractiveRequired)
+
+	opts := playwright.BrowserTypeLaunchPersistentContextOptions{
+		Headless:   playwright.Bool(false), // MUST be headful for user interaction
+		Viewport: &playwright.Size{
+			Width:  cfg.Viewport.Width,
+			Height: cfg.Viewport.Height,
+		},
+		Locale:     playwright.String("en-US"),
+		TimezoneId: playwright.String("Europe/Berlin"),
+		Args:       args,
+	}
+
+	// Try chrome channels, fall back to chromium
+	var bctx playwright.BrowserContext
+	channels := []string{"chrome", "chromium"}
+	var lastErr error
+	for _, ch := range channels {
+		opts.Channel = playwright.String(ch)
+		bctx, err = pw.Chromium.LaunchPersistentContext(userDataDir, opts)
+		if err == nil {
+			break
+		}
+		lastErr = err
+	}
+	if bctx == nil {
+		return fmt.Errorf("failed to launch browser (tried %v): %w", channels, lastErr)
+	}
+	defer func() { _ = bctx.Close() }()
+
+	page, err := bctx.NewPage()
+	if err != nil {
+		return fmt.Errorf("create page: %w", err)
+	}
+
+	// Navigate to NotebookLM (triggers Google login redirect)
+	slog.Info("Navigating to NotebookLM for authentication setup")
+	if _, err := page.Goto("https://notebooklm.google.com"); err != nil {
+		return fmt.Errorf("navigate to notebooklm: %w", err)
+	}
+
+	// Print user-facing message to stderr
+	fmt.Fprintf(os.Stderr, "Please complete Google login in the browser window. Waiting up to %d minutes...\n", cfg.SetupTimeoutMs/60000)
+
+	// Poll until we're on notebooklm.google.com (not accounts.google)
+	timeout := time.Duration(cfg.SetupTimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 10 * time.Minute
+	}
+	if err := waitForNotebookLM(ctx, page, timeout); err != nil {
+		return err
+	}
+
+	// Save browser state
+	statePath := filepath.Join(cfg.BrowserStateDir, stateFile)
+	if err := os.MkdirAll(cfg.BrowserStateDir, 0755); err != nil {
+		return fmt.Errorf("create state dir: %w", err)
+	}
+	if _, err := bctx.StorageState(statePath); err != nil {
+		return fmt.Errorf("save browser state: %w", err)
+	}
+	slog.Info("Browser state saved", "path", statePath)
+
+	return nil
+}
+
+// waitForNotebookLM polls page.URL() every 2 seconds until the URL contains
+// "notebooklm.google" and does NOT contain "accounts.google", or until the
+// context is cancelled or the timeout elapses.
+func waitForNotebookLM(ctx context.Context, page pageLike, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("setup cancelled: %w", ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("setup timed out after %v (user did not complete login)", timeout)
+			}
+			url := page.URL()
+			if strings.Contains(url, "notebooklm.google") && !strings.Contains(url, "accounts.google") {
+				slog.Info("Login detected", "url", url)
+				return nil
+			}
+		}
+	}
 }
 
 // AutoLogin performs automated Google login using configured credentials.

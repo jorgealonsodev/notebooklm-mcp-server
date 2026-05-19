@@ -258,9 +258,19 @@ func (r *ToolRegistry) handleGetHealth(_ context.Context, _ mcp.CallToolRequest)
 	return jsonResult(result)
 }
 
-func (r *ToolRegistry) handleSetupAuth(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Interactive setup requires a real browser — return placeholder for now
-	return textResult("Interactive auth setup requires a headful browser. Use the browser to complete Google login, then cookies will be saved automatically."), nil
+func (r *ToolRegistry) handleSetupAuth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Try to get Playwright from the browser manager; if not available,
+	// PerformSetup will launch its own instance.
+	var pw *playwright.Playwright
+	if gm, ok := r.browser.(interface{ GetPlaywright() *playwright.Playwright }); ok {
+		pw = gm.GetPlaywright()
+	}
+
+	err := r.authMgr.PerformSetup(ctx, pw, r.cfg)
+	if err != nil {
+		return errorResult(err), nil
+	}
+	return textResult("Authentication successful! Cookies saved for future sessions."), nil
 }
 
 func (r *ToolRegistry) handleReAuth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

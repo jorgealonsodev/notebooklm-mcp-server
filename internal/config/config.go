@@ -46,6 +46,7 @@ type Config struct {
 	LoginEmail          string
 	LoginPassword       string
 	AutoLoginTimeoutMs  int
+	SetupTimeoutMs      int
 
 	// Stealth
 	StealthEnabled       bool
@@ -96,6 +97,7 @@ func Load() Config {
 		LoginEmail:         "",
 		LoginPassword:      "",
 		AutoLoginTimeoutMs: 120_000,
+		SetupTimeoutMs:     600_000, // 10 minutes
 
 		StealthEnabled:        true,
 		StealthRandomDelays:   true,
@@ -173,6 +175,7 @@ func applyEnvOverrides(c *Config) {
 		c.LoginPassword = v
 	}
 	c.AutoLoginTimeoutMs = envInt("AUTO_LOGIN_TIMEOUT_MS", c.AutoLoginTimeoutMs)
+	c.SetupTimeoutMs = envInt("SETUP_TIMEOUT_MS", c.SetupTimeoutMs)
 	c.StealthEnabled = envBool("STEALTH_ENABLED", c.StealthEnabled)
 	c.StealthRandomDelays = envBool("STEALTH_RANDOM_DELAYS", c.StealthRandomDelays)
 	c.StealthHumanTyping = envBool("STEALTH_HUMAN_TYPING", c.StealthHumanTyping)

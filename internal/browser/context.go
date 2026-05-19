@@ -17,6 +17,7 @@ type Manager interface {
 	NewPage(ctx context.Context) (playwright.Page, error)
 	Close() error
 	Healthy() bool
+	GetPlaywright() *playwright.Playwright
 }
 
 // SharedContextManager manages a single persistent browser context shared
@@ -227,4 +228,11 @@ func (m *SharedContextManager) Healthy() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.launched && m.context != nil
+}
+
+// GetPlaywright returns the underlying Playwright instance, or nil if not launched.
+func (m *SharedContextManager) GetPlaywright() *playwright.Playwright {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pw
 }

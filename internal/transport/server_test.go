@@ -42,6 +42,9 @@ func (m *mockBrowser) Close() error {
 func (m *mockBrowser) Healthy() bool {
 	return m.launched && !m.closed
 }
+func (m *mockBrowser) GetPlaywright() *playwright.Playwright {
+	return nil
+}
 
 // mockSessionBrowser implements session.BrowserManager (which uses `any` return type).
 type mockSessionBrowser struct {

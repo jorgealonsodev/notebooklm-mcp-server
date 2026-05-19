@@ -20,6 +20,7 @@ func (m *mockBrowser) Launch(ctx context.Context) error              { return ni
 func (m *mockBrowser) NewPage(ctx context.Context) (playwright.Page, error) { return nil, nil }
 func (m *mockBrowser) Close() error                                  { return nil }
 func (m *mockBrowser) Healthy() bool                                 { return m.healthy }
+func (m *mockBrowser) GetPlaywright() *playwright.Playwright         { return nil }
 
 var _ browser.Manager = (*mockBrowser)(nil)
 
