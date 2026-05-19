@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -12,7 +13,7 @@ import (
 var recoverableErrors = []string{
 	"target closed",
 	"page closed",
-	"browser closed",
+	"browser",
 	"websocket disconnected",
 }
 
@@ -28,14 +29,17 @@ func IsRecoverableError(errMsg string) bool {
 	return false
 }
 
-// SafeSleep sleeps for the given duration but checks every pollInterval/10
-// whether the page is still alive. If the page dies during the sleep, it
-// returns early.
-func SafeSleep(isPageAlive func() bool, duration time.Duration) {
+// SafeSleep sleeps for the given duration but returns early if the context is
+// cancelled or the page dies. It checks page liveness every 10th poll to avoid
+// overhead while still being responsive to context cancellation.
+func SafeSleep(ctx context.Context, isPageAlive func() bool, duration time.Duration) {
 	const pollInterval = 100 * time.Millisecond
 	polls := int(duration / pollInterval)
 	if polls < 1 {
-		time.Sleep(duration)
+		select {
+		case <-time.After(duration):
+		case <-ctx.Done():
+		}
 		return
 	}
 	for i := 0; i < polls; i++ {
@@ -48,6 +52,10 @@ func SafeSleep(isPageAlive func() bool, duration time.Duration) {
 				return
 			}
 		}
-		time.Sleep(pollInterval)
+		select {
+		case <-time.After(pollInterval):
+		case <-ctx.Done():
+			return
+		}
 	}
 }

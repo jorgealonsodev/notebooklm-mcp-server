@@ -1,11 +1,14 @@
 package session
 
 import (
+	"sync"
 	"time"
 )
 
 // BrowserSession represents a single browser tab session.
+// It is protected by a mutex for concurrent page operations.
 type BrowserSession struct {
+	mu           sync.Mutex
 	ID           string
 	NotebookURL  string
 	Page         any // actual type is playwright.Page at runtime
@@ -26,17 +29,26 @@ func NewBrowserSession(notebookURL string) *BrowserSession {
 }
 
 // Touch updates the LastActivity timestamp to now.
+// Safe for concurrent use.
 func (s *BrowserSession) Touch() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.LastActivity = time.Now()
 }
 
 // IncrementMessages increments the message counter.
+// Safe for concurrent use.
 func (s *BrowserSession) IncrementMessages() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.MessageCount++
 }
 
 // Close closes the underlying browser page.
+// Safe for concurrent use.
 func (s *BrowserSession) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.Page == nil {
 		return nil
 	}
@@ -51,7 +63,10 @@ func (s *BrowserSession) Close() error {
 }
 
 // Reset reloads the page and resets the message count.
+// Safe for concurrent use.
 func (s *BrowserSession) Reset() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.MessageCount = 0
 	if s.Page == nil {
 		return nil

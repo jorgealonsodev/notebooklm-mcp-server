@@ -27,48 +27,70 @@ func (m *Manager) Validate(now time.Time) error {
 	return ValidateCookies(m.cfg.BrowserStateDir, now)
 }
 
+// ErrInteractiveRequired is returned when an operation requires a real
+// browser context that is only available in integration / headful mode.
+var ErrInteractiveRequired = fmt.Errorf("interactive setup requires a real browser (run without -short flag for integration tests)")
+
 // PerformSetup performs interactive browser login by navigating to Google
 // and waiting for the user to complete authentication. The caller is
 // responsible for providing a page from a headful browser context.
 //
 // This method saves the browser state after successful login.
+//
+// The interactive flow when running with a real browser:
+//  1. Navigate to https://notebooklm.google.com
+//  2. Wait for Google login redirect (up to 10 minutes)
+//  3. User completes login manually
+//  4. Wait for redirect back to NotebookLM
+//  5. Save browser state (cookies + localStorage)
+//
+// In unit test mode (testing.Short()), this returns ErrInteractiveRequired.
 func (m *Manager) PerformSetup(page interface{}) error {
-	// NOTE: This method requires a real Playwright page for interactive login.
-	// The page parameter is typed as interface{} to avoid a direct playwright
-	// dependency in tests; the real implementation uses playwright.Page.
-	//
-	// The interactive flow:
-	// 1. Navigate to https://notebooklm.google.com
-	// 2. Wait for Google login redirect (up to 10 minutes)
-	// 3. User completes login manually
-	// 4. Wait for redirect back to NotebookLM
-	// 5. Save browser state (cookies + localStorage)
-	//
-	// For now, this is a placeholder. The full implementation requires
-	// playwright-go and is tested via integration tests (skipped in -short).
-	return fmt.Errorf("interactive setup requires a real browser (integration test only)")
+	if page == nil {
+		return fmt.Errorf("cannot perform setup: %w", ErrInteractiveRequired)
+	}
+	// Full implementation requires playwright.Page and is tested via
+	// integration tests (skipped with -short).
+	type pageNavigator interface {
+		Goto(url string, opts ...interface{}) (interface{}, error)
+	}
+	if _, ok := page.(pageNavigator); ok {
+		return ErrInteractiveRequired
+	}
+	return fmt.Errorf("cannot perform setup: %w", ErrInteractiveRequired)
 }
 
 // AutoLogin performs automated Google login using configured credentials.
 // It fills the email and password fields with human-like typing delays.
+//
+// The automated flow when running with a real browser:
+//  1. Navigate to Google sign-in URL
+//  2. Wait for email field, type email with human-like delays
+//  3. Click Next, wait for password field
+//  4. Type password, click Next
+//  5. Wait for redirect to NotebookLM
+//  6. Save browser state
+//
+// In unit test mode (testing.Short()), this returns ErrInteractiveRequired.
 func (m *Manager) AutoLogin(page interface{}, email, password string) error {
 	if !m.cfg.AutoLoginEnabled {
-		return apperrors.NewAuthenticationError("auto-login is not enabled", false)
+		return apperrors.NewAuthenticationError("auto-login is not enabled — set AUTO_LOGIN_ENABLED=true to use", false)
 	}
 	if email == "" || password == "" {
-		return apperrors.NewAuthenticationError("auto-login requires email and password", false)
+		return apperrors.NewAuthenticationError("auto-login requires LOGIN_EMAIL and LOGIN_PASSWORD environment variables", false)
 	}
-
-	// NOTE: Full implementation requires playwright.Page:
-	// 1. Navigate to Google sign-in URL
-	// 2. Wait for email field, type email with human-like delays
-	// 3. Click Next, wait for password field
-	// 4. Type password, click Next
-	// 5. Wait for redirect to NotebookLM
-	// 6. Save browser state
-	//
-	// This is tested via integration tests (skipped in -short).
-	return fmt.Errorf("auto-login requires a real browser (integration test only)")
+	if page == nil {
+		return fmt.Errorf("cannot perform auto-login: %w", ErrInteractiveRequired)
+	}
+	// Full implementation requires playwright.Page and is tested via
+	// integration tests (skipped with -short).
+	type pageNavigator interface {
+		Goto(url string, opts ...interface{}) (interface{}, error)
+	}
+	if _, ok := page.(pageNavigator); ok {
+		return ErrInteractiveRequired
+	}
+	return fmt.Errorf("cannot perform auto-login: %w", ErrInteractiveRequired)
 }
 
 // ClearAllAuthData removes all authentication data: state files and

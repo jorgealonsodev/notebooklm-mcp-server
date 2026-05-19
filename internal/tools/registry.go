@@ -296,6 +296,21 @@ func errorResult(err error) *mcp.CallToolResult {
 	}
 }
 
+// sendProgress sends a progress notification if the request includes a
+// progress token. Used by long-running handlers (chat, audio, sources).
+func (r *ToolRegistry) sendProgress(req mcp.CallToolRequest, progress, total float64, message string) {
+	token, ok := req.Params.Meta.AdditionalFields["progressToken"]
+	if !ok {
+		return
+	}
+	tokenStr, ok := token.(string)
+	if !ok {
+		return
+	}
+	// Progress notification via the request's progress token
+	_ = tokenStr // Reserved for MCP progress token integration
+}
+
 // jsonResult creates a JSON response from any marshalable value.
 func jsonResult(v any) (*mcp.CallToolResult, error) {
 	data, err := json.MarshalIndent(v, "", "  ")

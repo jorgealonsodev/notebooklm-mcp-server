@@ -25,6 +25,8 @@ func (r *ToolRegistry) handleAskQuestion(ctx context.Context, req mcp.CallToolRe
 		return errorResult(err), nil
 	}
 
+	r.sendProgress(req, 0, 1, "Creating session...")
+
 	// Create or get a session
 	sess, err := r.sessions.Create(notebookURL)
 	if err != nil {
@@ -36,11 +38,15 @@ func (r *ToolRegistry) handleAskQuestion(ctx context.Context, req mcp.CallToolRe
 		return errorResult(fmt.Errorf("session page is not available")), nil
 	}
 
+	r.sendProgress(req, 0.3, 1, "Asking question...")
+
 	// Ask the question
 	result, err := r.notebooklm.Ask(ctx, page, question)
 	if err != nil {
 		return errorResult(fmt.Errorf("ask question: %w", err)), nil
 	}
+
+	r.sendProgress(req, 0.8, 1, "Formatting answer...")
 
 	// Format with citations if requested
 	format := notebooklm.CitationFormat(req.GetString("source_format", "none"))
@@ -323,6 +329,8 @@ func (r *ToolRegistry) handleAddSource(ctx context.Context, req mcp.CallToolRequ
 		return errorResult(err), nil
 	}
 
+	r.sendProgress(req, 0, 1, "Creating session...")
+
 	// Create or get a session
 	sess, err := r.sessions.Create(notebookURL)
 	if err != nil {
@@ -334,10 +342,14 @@ func (r *ToolRegistry) handleAddSource(ctx context.Context, req mcp.CallToolRequ
 		return errorResult(fmt.Errorf("session page is not available")), nil
 	}
 
+	r.sendProgress(req, 0.3, 1, "Adding source...")
+
 	result, err := r.notebooklm.AddSource(page, sourceType, content, title)
 	if err != nil {
 		return errorResult(fmt.Errorf("add source: %w", err)), nil
 	}
+
+	r.sendProgress(req, 1, 1, "Source added")
 
 	return jsonResult(result)
 }
@@ -349,6 +361,8 @@ func (r *ToolRegistry) handleGenerateAudio(ctx context.Context, req mcp.CallTool
 	if err != nil {
 		return errorResult(err), nil
 	}
+
+	r.sendProgress(req, 0, 1, "Creating session...")
 
 	// Create or get a session
 	sess, err := r.sessions.Create(notebookURL)
@@ -369,10 +383,18 @@ func (r *ToolRegistry) handleGenerateAudio(ctx context.Context, req mcp.CallTool
 		timeoutMs = r.cfg.AnswerTimeoutMs
 	}
 
+	r.sendProgress(req, 0.2, 1, "Generating audio overview...")
+
 	result, err := r.notebooklm.GenerateAudio(page, customPrompt, timeoutMs)
 	if err != nil {
 		return errorResult(fmt.Errorf("generate audio: %w", err)), nil
 	}
+
+	if waitForCompletion {
+		r.sendProgress(req, 0.5, 1, "Waiting for audio generation to complete...")
+	}
+
+	r.sendProgress(req, 1, 1, "Audio generation triggered")
 
 	return jsonResult(result)
 }
