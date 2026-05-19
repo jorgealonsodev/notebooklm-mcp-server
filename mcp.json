@@ -2,7 +2,7 @@
   "mcpServers": {
     "notebooklm": {
       "command": "./notebooklm-mcp-server",
-      "args": ["--transport=stdio"],
+      "args": ["--transport=stdio", "--profile=full"],
       "env": {
         "HEADLESS": "true",
         "STEALTH_ENABLED": "true",
