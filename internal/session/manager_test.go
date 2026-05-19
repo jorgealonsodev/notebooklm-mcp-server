@@ -30,7 +30,7 @@ func (m *mockBrowserManager) Healthy() bool {
 	defer m.mu.Unlock()
 	return m.healthy
 }
-func (m *mockBrowserManager) NewPage(ctx context.Context) (pageOps, error) {
+func (m *mockBrowserManager) NewPage(ctx context.Context) (any, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.newPageErr != nil {
@@ -41,7 +41,7 @@ func (m *mockBrowserManager) NewPage(ctx context.Context) (pageOps, error) {
 	return page, nil
 }
 
-// mockPage implements pageOps for testing.
+// mockPage implements a minimal page interface for testing.
 type mockPage struct {
 	mu           sync.Mutex
 	closed       bool
@@ -50,7 +50,7 @@ type mockPage struct {
 	reloadCalled bool
 }
 
-func (m *mockPage) Close() error {
+func (m *mockPage) Close(opts ...interface{}) error {
 	m.mu.Lock()
 	m.closed = true
 	m.mu.Unlock()
@@ -63,11 +63,11 @@ func (m *mockPage) IsClosed() bool {
 	return m.closed
 }
 
-func (m *mockPage) Reload(opts ...interface{}) error {
+func (m *mockPage) Reload(opts ...interface{}) (interface{}, error) {
 	m.mu.Lock()
 	m.reloadCalled = true
 	m.mu.Unlock()
-	return m.reloadErr
+	return nil, m.reloadErr
 }
 
 func TestNewManager(t *testing.T) {

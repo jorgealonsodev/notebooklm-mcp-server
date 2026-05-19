@@ -4,18 +4,11 @@ import (
 	"time"
 )
 
-// pageOps defines the minimal page operations needed by the session manager.
-// playwright.Page satisfies this interface implicitly.
-type pageOps interface {
-	Close() error
-	Reload(opts ...interface{}) error
-}
-
 // BrowserSession represents a single browser tab session.
 type BrowserSession struct {
 	ID           string
 	NotebookURL  string
-	Page         pageOps
+	Page         any // actual type is playwright.Page at runtime
 	CreatedAt    time.Time
 	LastActivity time.Time
 	MessageCount int
@@ -47,7 +40,14 @@ func (s *BrowserSession) Close() error {
 	if s.Page == nil {
 		return nil
 	}
-	return s.Page.Close()
+	// Page is playwright.Page at runtime
+	type pageCloser interface {
+		Close(opts ...interface{}) error
+	}
+	if c, ok := s.Page.(pageCloser); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // Reset reloads the page and resets the message count.
@@ -56,5 +56,12 @@ func (s *BrowserSession) Reset() error {
 	if s.Page == nil {
 		return nil
 	}
-	return s.Page.Reload()
+	type pageReloader interface {
+		Reload(opts ...interface{}) (interface{}, error)
+	}
+	if r, ok := s.Page.(pageReloader); ok {
+		_, err := r.Reload()
+		return err
+	}
+	return nil
 }

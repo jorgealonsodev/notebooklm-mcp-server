@@ -16,7 +16,7 @@ import (
 // BrowserManager defines the browser operations needed by the session manager.
 type BrowserManager interface {
 	Launch(ctx context.Context) error
-	NewPage(ctx context.Context) (pageOps, error)
+	NewPage(ctx context.Context) (any, error)
 	Close() error
 	Healthy() bool
 }
