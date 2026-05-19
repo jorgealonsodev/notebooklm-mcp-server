@@ -142,7 +142,7 @@ func (m *SharedContextManager) Launch(ctx context.Context) error {
 	var launchErr error
 	channels := DefaultChromeChannels()
 
-	for _, channel := range channels {
+		for _, channel := range channels {
 		m.context, err = pw.Chromium.LaunchPersistentContext(userDataDir, playwright.BrowserTypeLaunchPersistentContextOptions{
 			Channel:    playwright.String(channel),
 			Headless:   playwright.Bool(headless),
@@ -152,6 +152,11 @@ func (m *SharedContextManager) Launch(ctx context.Context) error {
 			Args:       args,
 		})
 		if err == nil {
+			// Inject stealth evasions into every page in this context
+			if addInitErr := m.context.AddInitScript(playwright.Script{Content: playwright.String(stealthScript)}); addInitErr != nil {
+				// Non-fatal: stealth degrades gracefully, browser still works
+				fmt.Printf("browser: AddInitScript failed (stealth degraded): %v\n", addInitErr)
+			}
 			m.browser = m.context.Browser()
 			m.launched = true
 			return nil
