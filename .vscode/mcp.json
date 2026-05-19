@@ -7,7 +7,7 @@
         "--transport=stdio"
       ],
       "env": {
-        "HEADLESS": "false",
+        "HEADLESS": "true",
         "STEALTH_ENABLED": "true",
         "ANSWER_TIMEOUT_MS": "300000"
       }
